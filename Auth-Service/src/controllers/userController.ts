@@ -1,6 +1,7 @@
 import axios from "axios";
 import { CLIENT_ID, CLIENT_SECRET, KEYCLOAK_URL, REALM } from "../env";
 import { type KeycloakUser, type Request, type Response } from "../types/types";
+import { CreateUserDto } from "../types/userDto";
 
 const getAdminAccessToken = async () => {
   const response = await axios.post(
@@ -116,12 +117,80 @@ async function getUserById(req: Request<any, any, { id: string }>, res: Response
   }
 }
 
-async function createUser(req: Request, res: Response) {
+async function createUser(req: Request<CreateUserDto>, res: Response) {
+    try {
+        const body = req.body;
 
+        const token = await getAdminAccessToken();
+
+        await axios.post(
+            `${KEYCLOAK_URL}/admin/realms/${REALM}/users`,
+            {
+                username: body.username,
+                email: body.email,
+                enabled: body.isActive ?? true,
+
+                attributes: {
+                    birthDate: body.birthDate
+                },
+
+                credentials: [
+                    {
+                        type: "password",
+                        value: body.password,
+                        temporary: false
+                    }
+                ]
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json"
+                }
+            }
+        );
+
+        res.status(201).json({
+            message: "User created"
+        });
+
+    } catch (error: any) {
+        console.error(error.response?.data);
+
+        res.status(500).json({
+            error: error.response?.data || error.message
+        });
+    }
 }
 
-async function blockUser(req: Request, res: Response) {
+async function blockUser(req: Request<any, any, { id: string }>, res: Response) {
+    try {
+        const token = await getAdminAccessToken();
 
+        await axios.put(
+            `${KEYCLOAK_URL}/admin/realms/${REALM}/users/${req.params.id}`,
+            {
+                enabled: false
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json"
+                }
+            }
+        );
+
+        res.json({
+            message: "User blocked"
+        });
+
+    } catch (error: any) {
+        console.error(error.response?.data);
+
+        res.status(500).json({
+            error: error.response?.data || error.message
+        });
+    }
 }
 
 export default {
