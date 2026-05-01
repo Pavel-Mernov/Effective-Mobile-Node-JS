@@ -1,53 +1,41 @@
-import jwt, { JwtHeader } from "jsonwebtoken";
-import jwksClient, { type SigningKey } from 'jwks-rsa';
+import type { JWTPayload } from "jose";
 import { REALM } from "../env";
 
-const client = jwksClient({
-  jwksUri: `http://keycloak:8080/realms/${REALM}/protocol/openid-connect/certs`
-});
+type JoseModule = typeof import("jose");
+type RemoteJWKSet = ReturnType<JoseModule["createRemoteJWKSet"]>;
 
-function getKey(header : JwtHeader, callback: any) {
+const importJose = new Function("specifier", "return import(specifier)") as (
+  specifier: string
+) => Promise<JoseModule>;
 
-  client.getSigningKey(header.kid, (err, key) => {
-    if (err) {
-      console.log('JWKS error:', err);
-      return callback(err, null);
-    }
+let josePromise: Promise<JoseModule> | undefined;
+let jwks: RemoteJWKSet | undefined;
 
-    if (!key) {
-      return callback(new Error('No signing key found'), null);
-    }
+function getJose() {
+  josePromise ??= importJose("jose");
 
-    console.log('Key found:', !!key);
-
-    const signingKey = key?.getPublicKey();
-
-    callback(null, signingKey);
-  });
+  return josePromise;
 }
 
-export function verifyToken(token: string) : Promise<any> {
-    
-        return new Promise((resolve, reject) => {
-            try {
-                jwt.verify(token, getKey, {
-                    issuer: `http://localhost:8080/realms/${REALM}`, 
-                    // audience: 'pavel_mernov'
-                    }, 
-                    (err, decoded) => {
-                        if (err) {
-                            console.log('Error:\n' + JSON.stringify(err))
-                            reject(err);
-                        } 
-                        else {
-                            // console.log(JSON.stringify(decoded)) 
-                            resolve(decoded); 
-                        }
-                });
-            }
-            catch (err : any) {
-                console.log(JSON.stringify(err))
-                reject(err)
-            }
-        });
+function getJwks(createRemoteJWKSet: JoseModule["createRemoteJWKSet"]) {
+  jwks ??= createRemoteJWKSet(
+    new URL(`http://keycloak:8080/realms/${REALM}/protocol/openid-connect/certs`)
+  );
+
+  return jwks;
+}
+
+export async function verifyToken(token: string): Promise<JWTPayload> {
+  try {
+    const { createRemoteJWKSet, jwtVerify } = await getJose();
+    const { payload } = await jwtVerify(token, getJwks(createRemoteJWKSet), {
+      issuer: `http://localhost:8080/realms/${REALM}`,
+      // audience: "pavel_mernov",
+    });
+
+    return payload;
+  } catch (err) {
+    console.log("Error:\n" + JSON.stringify(err));
+    throw err;
+  }
 }

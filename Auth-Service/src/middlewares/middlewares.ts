@@ -18,7 +18,7 @@ interface Request<BodyType = any, CookieType = any> {
     [key: string]: any;
 }
 
-export function adminMiddleware(req : Request, res : Response, next : NextFunction) {
+export async function adminMiddleware(req : Request, res : Response, next : NextFunction) {
     const authHeader = req.headers.authorization;
 
     if (!authHeader) {
@@ -31,10 +31,14 @@ export function adminMiddleware(req : Request, res : Response, next : NextFuncti
       return res.status(401).json({ error: 'No token provided' });
     }
 
-    const decodedToken = verifyToken(token) as { realm_access?: { roles: string[] } };
-    if (!decodedToken.realm_access?.roles.includes('admin')) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
+    try {
+      const decodedToken = await verifyToken(token) as { realm_access?: { roles: string[] } };
+      if (!decodedToken.realm_access?.roles.includes('admin')) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
 
-    next();
+      next();
+    } catch {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
 }
