@@ -1,0 +1,58 @@
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+*.log
+
+# Build-артефакты
+dist/
+build/
+.out/
+.cache/
+
+# TypeScript
+*.tsbuildinfo
+
+# Vite
+.vite/
+
+# Env файлы
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+
+# OS системные файлы
+.DS_Store
+Thumbs.db
+
+# PostgreSQL (дампы, данные)
+*.sql
+*.dump
+pgdata/
+
+# Docker
+docker-compose.override.yml
+*.pid
+
+# Тесты
+coverage/
+*.lcov
+
+.jest-temp/
+
+# Temporary
+tmp/
+temp/
+temp-*/
+
+# Logs
+logs/
+*.log

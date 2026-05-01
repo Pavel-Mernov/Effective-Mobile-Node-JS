@@ -1,0 +1,70 @@
+version: "3.8"
+
+services:
+
+  auth-service:
+    build: ./auth_service
+    container_name: auth-service
+    ports:
+      - "3005:3005"
+    # labels:
+    #  - "traefik.enable=true"
+    #  - "traefik.http.routers.auth.rule=Host(`api.riscvcourse.ru`) && PathPrefix(`/auth`)"
+    #  - "traefik.http.routers.auth.entrypoints=websecure"
+    #  - "traefik.http.routers.auth.tls.certresolver=myresolver"
+    #  - "traefik.http.middlewares.auth-stripprefix.stripprefix.prefixes=/auth"
+
+      # CORS middleware
+    #  - "traefik.http.middlewares.auth-cors.headers.accesscontrolalloworiginlist=https://www.riscvcourse.ru,https://riscvcourse.ru,http://localhost:5173"
+    #  - "traefik.http.middlewares.auth-cors.headers.accesscontrolallowmethods=GET,POST,OPTIONS"
+    #  - "traefik.http.middlewares.auth-cors.headers.accesscontrolallowheaders=Content-Type,Authorization"
+    #  - "traefik.http.middlewares.auth-cors.headers.accesscontrolallowcredentials=true"
+
+    #  - "traefik.http.routers.auth.middlewares=auth-stripprefix,auth-cors"
+    env_file:
+      - ./auth_service/.env
+      
+    depends_on:
+      - keycloak
+
+  postgres:
+    image: postgres:15
+    container_name: keycloak-db
+
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+
+    ports:
+      - "5434:5432"
+    volumes:
+      - keycloak_db_data:/var/lib/postgresql/data
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    container_name: keycloak
+    command: start
+    environment:
+      KC_DB: postgres
+      KC_DB_URL_HOST: postgres
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+
+      KC_BOOTSTRAP_ADMIN_USERNAME: pavel_mernov_admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: pavel_mernov_admin
+
+      KC_HOSTNAME: localhost
+      KC_HTTP_ENABLED: "true"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+
+volumes:
+  keycloak_db_data:
+
+networks:
+  default:
+    driver: bridge
