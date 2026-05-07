@@ -1,3 +1,5 @@
+import * as process from "node:process";
+
 process.env.NODE_ENV = "test";
 process.env.PORT ??= "3005";
 process.env.KEYCLOAK_URL ??= "http://localhost:8080";

@@ -32,8 +32,15 @@ export async function adminMiddleware(req : Request, res : Response, next : Next
     }
 
     try {
-      const decodedToken = await verifyToken(token) as { realm_access?: { roles: string[] } };
-      if (!decodedToken.realm_access?.roles.includes('admin')) {
+      const decodedToken = await verifyToken(token) as {
+        realm_access?: { roles?: string[] };
+        resource_access?: Record<string, { roles?: string[] }>;
+      };
+      const realmRoles = decodedToken.realm_access?.roles ?? [];
+      const clientRoles = Object.values(decodedToken.resource_access ?? {})
+        .flatMap((resource) => resource.roles ?? []);
+
+      if (![...realmRoles, ...clientRoles].includes('admin')) {
         return res.status(403).json({ error: 'Access denied' });
       }
 

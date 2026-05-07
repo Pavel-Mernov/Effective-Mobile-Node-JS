@@ -65,7 +65,7 @@ const login = async (req : Request<LoginBody>, res : Response) => {
 
   } catch (err : any) {
 
-    // console.log(err)
+    console.log(err.response?.data);
 
     res.status(401).json({ error: 'Invalid credentials. ' + err.toString() });
   }

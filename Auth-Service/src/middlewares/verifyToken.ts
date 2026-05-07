@@ -1,3 +1,4 @@
+import { webcrypto } from "node:crypto";
 import type { JWTPayload } from "jose";
 import { REALM } from "../env";
 
@@ -11,7 +12,17 @@ const importJose = new Function("specifier", "return import(specifier)") as (
 let josePromise: Promise<JoseModule> | undefined;
 let jwks: RemoteJWKSet | undefined;
 
+function ensureWebCrypto() {
+  if (!globalThis.crypto) {
+    Object.defineProperty(globalThis, "crypto", {
+      value: webcrypto,
+      configurable: true,
+    });
+  }
+}
+
 function getJose() {
+  ensureWebCrypto();
   josePromise ??= importJose("jose");
 
   return josePromise;
@@ -35,7 +46,7 @@ export async function verifyToken(token: string): Promise<JWTPayload> {
 
     return payload;
   } catch (err) {
-    console.log("Error:\n" + JSON.stringify(err));
+    console.log("Token verification error:", err);
     throw err;
   }
 }

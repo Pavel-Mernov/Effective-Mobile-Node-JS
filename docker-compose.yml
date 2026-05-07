@@ -6,7 +6,7 @@ services:
     build: ./Auth-Service
     container_name: auth-service
     ports:
-      - "3005:3005"
+      - "3001:3001"
     # labels:
     #  - "traefik.enable=true"
     #  - "traefik.http.routers.auth.rule=Host(`api.riscvcourse.ru`) && PathPrefix(`/auth`)"
