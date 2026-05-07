@@ -12,7 +12,7 @@ router.post('/refresh', authController.refresh)
 router.get('/users', adminMiddleware, userController.getUsers)
 router.get('/users/:id', userController.getUserById)
 router.post('/users', adminMiddleware, userController.createUser)
-router.put('/block-user', adminMiddleware, userController.blockUser)
+router.put('/block-user/:id', adminMiddleware, userController.blockUser)
 
 
 export default router
