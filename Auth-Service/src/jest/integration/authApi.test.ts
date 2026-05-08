@@ -114,9 +114,13 @@ describe("Auth API integration", () => {
   });
 
   it("GET /auth-api/users/:id returns one user", async () => {
+    mockedVerifyToken.mockResolvedValueOnce({
+      realm_access: { roles: ["admin"] },
+      sub: "admin-user-id",
+    });
     mockedAxios.post.mockResolvedValueOnce(adminTokenResponse);
     mockedAxios.get.mockResolvedValueOnce({
-      data: [{ id: "user-id", email: "user@example.com" }],
+      data: { id: "user-id", email: "user@example.com" },
     });
 
     const response = await request(app)
@@ -125,13 +129,60 @@ describe("Auth API integration", () => {
       .expect(200);
 
     expect(response.body).toEqual({ id: "user-id", email: "user@example.com" });
+    expect(mockedAxios.get).toHaveBeenCalledWith(
+      "http://localhost:8080/admin/realms/test-realm/users/user-id",
+      expect.any(Object)
+    );
+  });
+
+  it("GET /auth-api/users/:id replaces requested id with current user id for non-admin token", async () => {
+    mockedVerifyToken.mockResolvedValueOnce({
+      realm_access: { roles: ["user"] },
+      sub: "current-user-id",
+    });
+    mockedAxios.post.mockResolvedValueOnce(adminTokenResponse);
+    mockedAxios.get.mockResolvedValueOnce({
+      data: { id: "current-user-id", email: "current@example.com" },
+    });
+
+    const response = await request(app)
+      .get("/auth-api/users/another-user-id")
+      .set("Authorization", "Bearer user-jwt")
+      .expect(200);
+
+    expect(response.body).toEqual({ id: "current-user-id", email: "current@example.com" });
+    expect(mockedAxios.get).toHaveBeenCalledWith(
+      "http://localhost:8080/admin/realms/test-realm/users/current-user-id",
+      expect.any(Object)
+    );
+  });
+
+  it("GET /auth-api/users/:id returns 401 without token", async () => {
+    const response = await request(app).get("/auth-api/users/user-id").expect(401);
+
+    expect(response.body).toEqual({ error: "No token provided" });
+    expect(mockedAxios.post).not.toHaveBeenCalled();
   });
 
   it("POST /auth-api/users creates a user for admin token", async () => {
     mockedVerifyToken.mockResolvedValueOnce({
       realm_access: { roles: ["admin"] },
     });
-    mockedAxios.post.mockResolvedValueOnce(adminTokenResponse).mockResolvedValueOnce({ data: {} });
+    mockedAxios.post
+      .mockResolvedValueOnce(adminTokenResponse)
+      .mockResolvedValueOnce({
+        data: {},
+        headers: {
+          location: "http://localhost:8080/admin/realms/test-realm/users/created-user-id",
+        },
+      })
+      .mockResolvedValueOnce({ data: {} });
+    mockedAxios.get.mockResolvedValueOnce({
+      data: {
+        id: "role-id",
+        name: "user",
+      },
+    });
 
     const response = await request(app)
       .post("/auth-api/users")
@@ -144,6 +195,11 @@ describe("Auth API integration", () => {
       .expect(201);
 
     expect(response.body).toEqual({ message: "User created" });
+    expect(mockedAxios.post).toHaveBeenLastCalledWith(
+      "http://localhost:8080/admin/realms/test-realm/users/created-user-id/role-mappings/realm",
+      [{ id: "role-id", name: "user" }],
+      expect.any(Object)
+    );
   });
 
   it("PUT /auth-api/block-user/:id blocks a user for admin token", async () => {

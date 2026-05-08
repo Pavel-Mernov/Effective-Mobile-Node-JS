@@ -60,8 +60,12 @@ describe("Auth API functional behavior", () => {
   });
 
   it("returns 404 when requested user does not exist", async () => {
+    mockedVerifyToken.mockResolvedValueOnce({
+      realm_access: { roles: ["admin"] },
+      sub: "admin-user-id",
+    });
     mockedAxios.post.mockResolvedValueOnce({ data: { access_token: "admin-token" } });
-    mockedAxios.get.mockResolvedValueOnce({ data: [] });
+    mockedAxios.get.mockRejectedValueOnce({ response: { status: 404 } });
 
     const response = await request(app)
       .get("/auth-api/users/missing-id")
@@ -69,5 +73,11 @@ describe("Auth API functional behavior", () => {
       .expect(404);
 
     expect(response.body).toEqual({ error: "User not found" });
+  });
+
+  it("requires authorization for loading a user by id", async () => {
+    const response = await request(app).get("/auth-api/users/user-id").expect(401);
+
+    expect(response.body).toEqual({ error: "No token provided" });
   });
 });

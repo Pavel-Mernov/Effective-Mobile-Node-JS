@@ -1,6 +1,6 @@
 import { Router } from "express"
 import authController from "../controllers/authController"
-import { adminMiddleware } from "../middlewares/middlewares"
+import { adminMiddleware, userIdParamMiddleware } from "../middlewares/middlewares"
 import userController from "../controllers/userController"
 
 const router = Router()
@@ -10,9 +10,9 @@ router.post('/logout', authController.logout)
 router.post('/refresh', authController.refresh)
 
 router.get('/users', adminMiddleware, userController.getUsers)
-router.get('/users/:id', userController.getUserById)
+router.get('/users/:id', userIdParamMiddleware, userController.getUserById)
 router.post('/users', userController.createUser)
-router.put('/block-user/:id', adminMiddleware, userController.blockUser)
+router.put('/block-user/:id', userIdParamMiddleware, userController.blockUser)
 
 
 export default router

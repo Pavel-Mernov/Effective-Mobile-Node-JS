@@ -112,7 +112,7 @@ describe("userController.getUserById", () => {
 
   it("returns a user found by id", async () => {
     mockedAxios.post.mockResolvedValueOnce(adminTokenResponse);
-    mockedAxios.get.mockResolvedValueOnce({ data: [{ id: "user-id", email: "u@example.com" }] });
+    mockedAxios.get.mockResolvedValueOnce({ data: { id: "user-id", email: "u@example.com" } });
 
     const req = createRequest({
       headers: { authorization: ["Bearer user-token"] },
@@ -123,10 +123,9 @@ describe("userController.getUserById", () => {
     await userController.getUserById(req, res);
 
     expect(mockedAxios.get).toHaveBeenCalledWith(
-      "http://localhost:8080/admin/realms/test-realm/users",
+      "http://localhost:8080/admin/realms/test-realm/users/user-id",
       {
         headers: { Authorization: "Bearer admin-token" },
-        params: { id: "user-id" },
       }
     );
     expect(res.json).toHaveBeenCalledWith({ id: "user-id", email: "u@example.com" });
@@ -134,7 +133,7 @@ describe("userController.getUserById", () => {
 
   it("returns 404 when user is not found", async () => {
     mockedAxios.post.mockResolvedValueOnce(adminTokenResponse);
-    mockedAxios.get.mockResolvedValueOnce({ data: [] });
+    mockedAxios.get.mockRejectedValueOnce({ response: { status: 404 } });
 
     const req = createRequest({
       headers: { authorization: "Bearer user-token" },
@@ -152,6 +151,7 @@ describe("userController.getUserById", () => {
 describe("userController.createUser", () => {
   beforeEach(() => {
     mockedAxios.post.mockReset();
+    mockedAxios.get.mockReset();
     jest.spyOn(console, "error").mockImplementation(() => undefined);
   });
 
@@ -160,7 +160,21 @@ describe("userController.createUser", () => {
   });
 
   it("creates a Keycloak user", async () => {
-    mockedAxios.post.mockResolvedValueOnce(adminTokenResponse).mockResolvedValueOnce({ data: {} });
+    mockedAxios.post
+      .mockResolvedValueOnce(adminTokenResponse)
+      .mockResolvedValueOnce({
+        data: {},
+        headers: {
+          location: "http://localhost:8080/admin/realms/test-realm/users/created-user-id",
+        },
+      })
+      .mockResolvedValueOnce({ data: {} });
+    mockedAxios.get.mockResolvedValueOnce({
+      data: {
+        id: "role-id",
+        name: "user",
+      },
+    });
 
     const req = createRequest({
       body: {
@@ -175,12 +189,17 @@ describe("userController.createUser", () => {
 
     await userController.createUser(req, res);
 
-    expect(mockedAxios.post).toHaveBeenLastCalledWith(
+    expect(mockedAxios.post).toHaveBeenNthCalledWith(
+      2,
       "http://localhost:8080/admin/realms/test-realm/users",
       {
         username: "new-user",
+        firstName: "new",
+        lastName: "user",
         email: "new-user@example.com",
+        emailVerified: true,
         enabled: false,
+        requiredActions: [],
         attributes: { birthDate: "2000-01-01" },
         credentials: [
           {
@@ -197,8 +216,68 @@ describe("userController.createUser", () => {
         },
       }
     );
+    expect(mockedAxios.get).toHaveBeenCalledWith(
+      "http://localhost:8080/admin/realms/test-realm/roles/user",
+      {
+        headers: {
+          Authorization: "Bearer admin-token",
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    expect(mockedAxios.post).toHaveBeenLastCalledWith(
+      "http://localhost:8080/admin/realms/test-realm/users/created-user-id/role-mappings/realm",
+      [{ id: "role-id", name: "user" }],
+      {
+        headers: {
+          Authorization: "Bearer admin-token",
+          "Content-Type": "application/json",
+        },
+      }
+    );
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.json).toHaveBeenCalledWith({ message: "User created" });
+  });
+
+  it("uses provided first and last name when creating a Keycloak user", async () => {
+    mockedAxios.post
+      .mockResolvedValueOnce(adminTokenResponse)
+      .mockResolvedValueOnce({
+        data: {},
+        headers: {
+          location: "http://localhost:8080/admin/realms/test-realm/users/created-user-id",
+        },
+      })
+      .mockResolvedValueOnce({ data: {} });
+    mockedAxios.get.mockResolvedValueOnce({
+      data: {
+        id: "role-id",
+        name: "user",
+      },
+    });
+
+    const req = createRequest({
+      body: {
+        username: "new-user",
+        firstName: "John",
+        lastName: "Smith",
+        email: "new-user@example.com",
+        password: "password",
+      },
+    });
+    const res = createResponse();
+
+    await userController.createUser(req, res);
+
+    expect(mockedAxios.post).toHaveBeenNthCalledWith(
+      2,
+      "http://localhost:8080/admin/realms/test-realm/users",
+      expect.objectContaining({
+        firstName: "John",
+        lastName: "Smith",
+      }),
+      expect.any(Object)
+    );
   });
 
   it("returns 500 when Keycloak user creation fails", async () => {

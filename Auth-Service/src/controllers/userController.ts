@@ -19,6 +19,52 @@ const getAdminAccessToken = async () => {
   return response.data.access_token as string;
 };
 
+const getHeaders = (token: string) => ({
+  Authorization: `Bearer ${token}`,
+  "Content-Type": "application/json",
+});
+
+const getCreatedUserId = (location: string | undefined) => {
+  const userId = location?.split("/").filter(Boolean).at(-1);
+
+  if (!userId) {
+    throw new Error("Created user id was not returned by Keycloak");
+  }
+
+  return userId;
+};
+
+const assignRealmRoleToUser = async (token: string, userId: string, roleName: string) => {
+  const roleResponse = await axios.get(
+    `${KEYCLOAK_URL}/admin/realms/${REALM}/roles/${roleName}`,
+    {
+      headers: getHeaders(token),
+    }
+  );
+
+  await axios.post(
+    `${KEYCLOAK_URL}/admin/realms/${REALM}/users/${userId}/role-mappings/realm`,
+    [roleResponse.data],
+    {
+      headers: getHeaders(token),
+    }
+  );
+};
+
+const getProfileNames = (body: CreateUserDto) => {
+  const username = body.username ?? body.email;
+  const usernameParts = username
+    .split(/[\s._-]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const fallbackName = usernameParts[0] ?? body.email.split("@")[0] ?? username;
+
+  return {
+    firstName: body.firstName?.trim() || fallbackName,
+    lastName: body.lastName?.trim() || usernameParts.slice(1).join(" ") || fallbackName,
+  };
+};
+
 async function getUsers(req: Request, res: Response) {
   const authorization = Array.isArray(req.headers?.authorization) ? req.headers.authorization[0] : req.headers?.authorization;
 
@@ -86,26 +132,25 @@ async function getUserById(req: Request<any, any, { id: string }>, res: Response
     const adminAccessToken = await getAdminAccessToken();
 
     const response = await axios.get(
-      `${KEYCLOAK_URL}/admin/realms/${REALM}/users`,
+      `${KEYCLOAK_URL}/admin/realms/${REALM}/users/${id}`,
       {
         headers: {
           Authorization: `Bearer ${adminAccessToken}`,
         },
-        params: {
-          id,
-        },
       }
     );
 
-    const [user] = Array.isArray(response.data) ? response.data : [];
+    res.json(response.data);
+  } catch (error) {
+    const status = axios.isAxiosError(error) || typeof error === "object"
+      ? (error as { response?: { status?: number } }).response?.status
+      : undefined;
 
-    if (!user) {
+    if (status === 404) {
       res.status(404).json({ error: "User not found" });
       return;
     }
 
-    res.json(user);
-  } catch (error) {
     const details = axios.isAxiosError(error) ? error.response?.data ?? error.message : String(error);
 
     console.log(JSON.stringify(details))
@@ -123,12 +168,19 @@ async function createUser(req: Request<CreateUserDto>, res: Response) {
 
         const token = await getAdminAccessToken();
 
-        await axios.post(
+        const { username, email, password, isActive } = body;
+        const { firstName, lastName } = getProfileNames(body);
+
+        const createUserResponse = await axios.post(
             `${KEYCLOAK_URL}/admin/realms/${REALM}/users`,
             {
-                username: body.username,
-                email: body.email,
-                enabled: body.isActive ?? true,
+                username: username ?? email,
+                firstName,
+                lastName,
+                email,
+                emailVerified: true,
+                enabled: isActive ?? true,
+                requiredActions: [],
 
                 attributes: {
                     birthDate: body.birthDate
@@ -137,18 +189,18 @@ async function createUser(req: Request<CreateUserDto>, res: Response) {
                 credentials: [
                     {
                         type: "password",
-                        value: body.password,
+                        value: password,
                         temporary: false
                     }
                 ]
             },
             {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json"
-                }
+                headers: getHeaders(token)
             }
         );
+
+        const userId = getCreatedUserId(createUserResponse.headers?.location);
+        await assignRealmRoleToUser(token, userId, "user");
 
         res.status(201).json({
             message: "User created"
@@ -173,10 +225,7 @@ async function blockUser(req: Request<any, any, { id: string }>, res: Response) 
                 enabled: false
             },
             {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json"
-                }
+                headers: getHeaders(token)
             }
         );
 
